@@ -4,21 +4,19 @@ using StackExchange.Redis;
 
 namespace FinalLab1.Services.Redis
 {
-    public class TicketQueueService
+    public class TicketQueueService : BaseRedisService
     {
-        private readonly IDatabase _db;
-        private readonly IGenericService<Seat, int> _enericService;
-        private readonly string _prefix = "event_queue_";
+        private readonly IGenericService<Seat, int> _genericService;
 
         public TicketQueueService(IConnectionMultiplexer redis, IGenericService<Seat, int> genericService)
+            : base(redis, "ticket_queue_") // Prefix được truyền vào lớp cơ sở
         {
-            _db = redis.GetDatabase();
-            _enericService = genericService;
+            _genericService = genericService;
         }
 
         public async Task<long> GetSoldCountAsync(int seatId)
         {
-            return await _db.ListLengthAsync(_prefix + seatId); // Lấy số lượng vé đã bán
+            return await GetQueueLengthAsync(seatId.ToString()); // Lấy số lượng vé đã bán
         }
 
         public async Task<bool> AddTicketToQueueAsync(int seatId, int userId)
@@ -26,7 +24,7 @@ namespace FinalLab1.Services.Redis
             var ticketCount = await GetSoldCountAsync(seatId);
 
             // Kiểm tra số ghế còn lại
-            var seat = await _enericService.GetByIdAsync(seatId);
+            var seat = await _genericService.GetByIdAsync(seatId);
             var maxSeat = int.Parse(seat.CountSeat);
 
             if (ticketCount >= maxSeat)
@@ -34,13 +32,12 @@ namespace FinalLab1.Services.Redis
                 return false; // Vé đã hết
             }
 
-            await _db.ListRightPushAsync(_prefix + seatId, userId); // Thêm vào queue Redis
-            return true;
+            return await AddToQueueAsync(seatId.ToString(), userId); // Thêm vào queue Redis
         }
 
         public async Task<bool> RemoveUserFromQueueAsync(int seatId, int userId)
         {
-            return await _db.ListRemoveAsync(_prefix + seatId, userId) > 0; // Gỡ người dùng khỏi queue Redis
+            return await RemoveFromQueueAsync(seatId.ToString(), userId); // Gỡ người dùng khỏi queue Redis
         }
     }
 }

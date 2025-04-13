@@ -7,7 +7,7 @@ namespace FinalLab1.Services.Redis
         protected readonly IDatabase _db;
         protected readonly string _prefix;
 
-        protected BaseRedisService(IConnectionMultiplexer redis, string prefix)
+        public BaseRedisService(IConnectionMultiplexer redis, string prefix)
         {
             _db = redis.GetDatabase();
             _prefix = prefix;

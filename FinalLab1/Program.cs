@@ -74,6 +74,8 @@ builder.Services.AddSingleton<IElasticClient>(sp =>
     return new ElasticClient(settings);
 });
 builder.Services.AddScoped(typeof(IGenericService<,>), typeof(GenericService<,>));
+builder.Services.AddScoped<TicketService>();
+
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddSignalR();
 // Đọc chuỗi kết nối Redis từ appsettings.json
@@ -81,9 +83,13 @@ var redisConnectionString = builder.Configuration.GetSection("Redis")["Connectio
 
 // Đăng ký IConnectionMultiplexer để sử dụng trong RedisQueueService
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
+builder.Services.AddScoped<TicketQueueService>();
 
+// ✅ Constructor đã sửa public, và không cần truyền prefix
 builder.Services.AddSingleton<RedisQueueService>();
-builder.Services.AddSingleton<TicketQueueService>();
+builder.Services.AddSingleton<ActiveEventRedisService>();
+builder.Services.AddSingleton<EventQueueRedisService>();
+
 builder.Services.AddSingleton<TicketKafkaProducerService>();
 
 builder.Services.AddSingleton<KafkaProducerService>();

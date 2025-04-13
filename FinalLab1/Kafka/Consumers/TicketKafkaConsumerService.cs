@@ -11,13 +11,16 @@ namespace FinalLab1.Kafka.Consumers
     public class TicketKafkaConsumerService : BackgroundService
     {
         private readonly IConsumer<Null, string> _consumer;
-        private readonly TicketService _ticketService;
-        private readonly TicketQueueService _ticketQueueService;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<TicketKafkaConsumerService> _logger;
-        private readonly IHubContext<QueueHub> _hubContext; // Inject HubContext
+        private readonly IHubContext<QueueHub> _hubContext;
         private readonly string _topic = "ticket_request_topic";
 
-        public TicketKafkaConsumerService(IConfiguration config, TicketService ticketService, TicketQueueService ticketQueueService, ILogger<TicketKafkaConsumerService> logger, IHubContext<QueueHub> hubContext)
+        public TicketKafkaConsumerService(
+            IConfiguration config,
+            IServiceProvider serviceProvider,
+            ILogger<TicketKafkaConsumerService> logger,
+            IHubContext<QueueHub> hubContext)
         {
             var conf = new ConsumerConfig
             {
@@ -25,9 +28,9 @@ namespace FinalLab1.Kafka.Consumers
                 GroupId = "ticket-consumer-group",
                 AutoOffsetReset = AutoOffsetReset.Earliest
             };
+
             _consumer = new ConsumerBuilder<Null, string>(conf).Build();
-            _ticketService = ticketService;
-            _ticketQueueService = ticketQueueService;
+            _serviceProvider = serviceProvider;
             _logger = logger;
             _hubContext = hubContext;
         }
@@ -45,30 +48,35 @@ namespace FinalLab1.Kafka.Consumers
                         var consumeResult = _consumer.Consume(stoppingToken);
                         var ticketRequest = JsonConvert.DeserializeObject<TicketRequest>(consumeResult.Message.Value);
 
-                        // Lấy UserId và SeatId từ TicketRequest
                         var seatId = ticketRequest.SeatId;
                         var userId = ticketRequest.UserId;
 
-                        // Kiểm tra hàng đợi Redis để đảm bảo user là người đầu tiên trong hàng đợi
-                        var isTicketAvailable = await _ticketQueueService.AddTicketToQueueAsync(seatId, userId);
-
-                        if (!isTicketAvailable)
+                        // ✅ Tạo scope để dùng các service Scoped
+                        using (var scope = _serviceProvider.CreateScope())
                         {
-                            _logger.LogInformation($"User {userId} không thể đặt vé vì vé đã hết.");
-                            // Gửi thông báo không thành công đến client
-                            await _hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveTicketStatus", "Vé đã hết");
-                            continue; // Không tiếp tục nếu vé đã hết
+                            var ticketService = scope.ServiceProvider.GetRequiredService<TicketService>();
+                            var ticketQueueService = scope.ServiceProvider.GetRequiredService<TicketQueueService>();
+
+                            // Kiểm tra hàng đợi Redis
+                            var isTicketAvailable = await ticketQueueService.AddTicketToQueueAsync(seatId, userId);
+
+                            if (!isTicketAvailable)
+                            {
+                                _logger.LogInformation($"User {userId} không thể đặt vé vì vé đã hết.");
+                                await _hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveTicketStatus", "Vé đã hết");
+                                continue;
+                            }
+
+                            // Xử lý đặt vé
+                            var result = await ticketService.BookTicketAsync(ticketRequest);
+                            _logger.LogInformation($"Processed ticket request for User {userId}: {result}");
+
+                            // Gửi kết quả về client
+                            await _hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveTicketStatus", result);
+
+                            // Xoá khỏi hàng đợi
+                            await ticketQueueService.RemoveUserFromQueueAsync(seatId, userId);
                         }
-
-                        // Gọi TicketService để xử lý yêu cầu đặt vé
-                        var result = await _ticketService.BookTicketAsync(ticketRequest);
-                        _logger.LogInformation($"Processed ticket request for User {ticketRequest.UserId}: {result}");
-
-                        // Gửi kết quả thành công đến client
-                        await _hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveTicketStatus", result);
-
-                        // Sau khi xử lý, xóa người dùng khỏi hàng đợi Redis
-                        await _ticketQueueService.RemoveUserFromQueueAsync(seatId, userId);
                     }
                     catch (ConsumeException e)
                     {

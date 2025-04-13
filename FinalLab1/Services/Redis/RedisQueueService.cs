@@ -2,15 +2,13 @@
 
 namespace FinalLab1.Services.Redis
 {
-    public class RedisQueueService
+    public class RedisQueueService : BaseRedisService
     {
-        private readonly IDatabase _db;
         private readonly string _prefix = "event_queue_";
         private readonly string _activePrefix = "active_users:";
 
-        public RedisQueueService(IConnectionMultiplexer redis)
+        public RedisQueueService(IConnectionMultiplexer redis) : base(redis, "")
         {
-            _db = redis.GetDatabase();
         }
 
         public async Task<long> EnqueueAsync(int eventId, int userId)
