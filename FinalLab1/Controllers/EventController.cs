@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Microsoft.IdentityModel.JsonWebTokens;
 using FinalLab1.Services.Redis;
-using FinalLab1.Kafka;
 using Newtonsoft.Json;
+using Microsoft.EntityFrameworkCore;
+using FinalLab1.Kafka.Producers;
+using FinalLab1.Kafka.Consumers;
 
 namespace FinalLab1.Controllers
 {
@@ -120,10 +122,18 @@ namespace FinalLab1.Controllers
         }
 
         [HttpGet("event-sreach")]
-        public async Task<IActionResult> Search([FromQuery] string keyword, [FromQuery] string? type)
+        public async Task<IActionResult> Search([FromQuery] string keyword)
         {
-            var results = await _searchService.SearchEventsAsync(keyword, type);
+            var results = await _searchService.SearchEventsWithCacheAsync(keyword);
             return Ok(results);
+        }
+
+        [HttpPost("reindex")]
+        public async Task<IActionResult> ReindexAllEvents()
+        {
+            await _searchService.ReIndex();
+
+            return Ok("done");
         }
     }
 }

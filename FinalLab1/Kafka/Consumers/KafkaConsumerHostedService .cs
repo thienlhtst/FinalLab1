@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Hosting;
 
-namespace FinalLab1.Kafka
+namespace FinalLab1.Kafka.Consumers
 {
     public class KafkaConsumerHostedService : BackgroundService
     {

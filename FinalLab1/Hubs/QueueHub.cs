@@ -1,4 +1,5 @@
-﻿using FinalLab1.Kafka;
+﻿using FinalLab1.Kafka.Consumers;
+using FinalLab1.Kafka.Producers;
 using FinalLab1.Services.Redis;
 using Microsoft.AspNetCore.SignalR;
 using Newtonsoft.Json;
@@ -49,6 +50,11 @@ namespace FinalLab1.Hubs
                         Position = i + 1
                     });
             }
+        }
+
+        public async Task SendTicketStatus(string message)
+        {
+            await Clients.All.SendAsync("ReceiveTicketStatus", message); // Gửi thông báo đến tất cả client kết nối
         }
     }
 }

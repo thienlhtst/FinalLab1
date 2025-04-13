@@ -4,7 +4,6 @@ using Confluent.Kafka;
 using FinalLab1.Converter;
 using FinalLab1.Data;
 using FinalLab1.Hubs;
-using FinalLab1.Kafka;
 using FinalLab1.Services;
 using FinalLab1.Services.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -12,6 +11,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
+using Nest;
+using FinalLab1.Kafka.Consumers;
+using FinalLab1.Kafka.Producers;
 
 var builder = WebApplication.CreateBuilder(args);
 var kafkaConfig = builder.Configuration.GetSection("Kafka");
@@ -64,7 +66,13 @@ builder.Services.AddControllersWithViews()
 builder.Services.AddDbContext<LabDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddScoped<EventSearchService>();
+builder.Services.AddSingleton<IElasticClient>(sp =>
+{
+    var settings = new ConnectionSettings(new Uri("http://localhost:9200"))
+        .DefaultIndex("events_index");
 
+    return new ElasticClient(settings);
+});
 builder.Services.AddScoped(typeof(IGenericService<,>), typeof(GenericService<,>));
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddSignalR();
@@ -75,8 +83,12 @@ var redisConnectionString = builder.Configuration.GetSection("Redis")["Connectio
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
 
 builder.Services.AddSingleton<RedisQueueService>();
+builder.Services.AddSingleton<TicketQueueService>();
+builder.Services.AddSingleton<TicketKafkaProducerService>();
+
 builder.Services.AddSingleton<KafkaProducerService>();
 builder.Services.AddHostedService<KafkaConsumerHostedService>();
+builder.Services.AddHostedService<TicketKafkaConsumerService>();
 
 /////////////////////////////////AuthenAuthor////////////
 var jwtConfig = builder.Configuration.GetSection("JwtSettings");

@@ -1,6 +1,6 @@
 ﻿using Confluent.Kafka;
 
-namespace FinalLab1.Kafka
+namespace FinalLab1.Kafka.Producers
 {
     public class KafkaProducerService
     {
