@@ -8,13 +8,16 @@ namespace FinalLab1.Hubs
 {
     public class QueueHub : Hub
     {
-        private readonly RedisQueueService _queueService;
+        private readonly EventQueueRedisService _queueService;
+        private readonly ActiveEventRedisService _activequeueService;
+
         private readonly KafkaProducerService _kafkaProducer;
         private readonly IHubContext<QueueHub> _hubContext;
 
-        public QueueHub(RedisQueueService queueService, KafkaProducerService kafkaProducer, IHubContext<QueueHub> hubContext)
+        public QueueHub(EventQueueRedisService queueService, ActiveEventRedisService activeEventRedisService, KafkaProducerService kafkaProducer, IHubContext<QueueHub> hubContext)
         {
             _queueService=queueService;
+            _activequeueService=activeEventRedisService;
             _kafkaProducer=kafkaProducer;
             _hubContext=hubContext;
         }
@@ -27,7 +30,7 @@ namespace FinalLab1.Hubs
 
         public async Task LeaveEvent(int eventId, int userId)
         {
-            await _queueService.RemoveActiveUserAsync(eventId, userId);
+            await _activequeueService.RemoveActiveUserAsync(eventId, userId);
 
             // Gọi kafka để xử lý người tiếp theo trong hàng chờ
             var message = JsonConvert.SerializeObject(new QueueMessage

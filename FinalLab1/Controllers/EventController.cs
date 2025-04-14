@@ -17,16 +17,19 @@ namespace FinalLab1.Controllers
     public class EventController : GenericControllerBase<Event, int>
     {
         private readonly IGenericService<Event, int> _genericService;
-        private readonly RedisQueueService _queueService;
+        private readonly ActiveEventRedisService _activequeueService;
+        private readonly EventQueueRedisService _eventqueueService;
+
         private readonly KafkaProducerService _kafkaProducerService;
         private readonly EventSearchService _searchService;
 
-        public EventController(IGenericService<Event, int> service, RedisQueueService redisQueueService, KafkaProducerService kafkaProducerService, EventSearchService searchService) : base(service)
+        public EventController(IGenericService<Event, int> service, EventQueueRedisService eventQueueRedisService, ActiveEventRedisService activeredisQueueService, KafkaProducerService kafkaProducerService, EventSearchService searchService) : base(service)
         {
             _genericService = service;
-            _queueService = redisQueueService;
+            _activequeueService = activeredisQueueService;
             _kafkaProducerService = kafkaProducerService;
-            _searchService=searchService;
+            _eventqueueService = eventQueueRedisService;
+            _searchService =searchService;
         }
 
         [HttpGet("enter-event/{id}")]
@@ -43,24 +46,24 @@ namespace FinalLab1.Controllers
                 return BadRequest("Invalid or missing user ID.");
 
             // Kiểm tra nếu user đã active rồi thì không cần xử lý lại
-            if (await _queueService.IsUserActiveAsync(id, userId))
+            if (await _activequeueService.IsUserActiveAsync(id, userId))
             {
                 return Ok(new { status = "in", eventInfo }); // User đã có quyền rồi
             }
 
-            var activeUserCount = await _queueService.GetActiveUserCountAsync(id);
+            var activeUserCount = await _activequeueService.GetActiveUserCountAsync(id);
             if (activeUserCount < 2)
             {
                 // Cho phép truy cập và đánh dấu là active
-                await _queueService.AddActiveUserAsync(id, userId);
+                await _activequeueService.AddActiveUserAsync(id, userId);
                 return Ok(new { status = "in", eventInfo });
             }
             else
             {
-                await _queueService.RemoveFromQueueAsync(id, userId);
+                await _eventqueueService.RemoveFromQueueAsync(id, userId);
 
                 // Thêm vào hàng đợi
-                await _queueService.EnqueueAsync(id, userId);
+                await _eventqueueService.EnqueueAsync(id, userId);
                 var message = JsonConvert.SerializeObject(new QueueMessage
                 {
                     EventId = id,
@@ -68,7 +71,7 @@ namespace FinalLab1.Controllers
                 });
                 await _kafkaProducerService.SendMessageAsync("event_queue_topic", message);
 
-                var position = await _queueService.GetUserPositionAsync(id, userId);
+                var position = await _eventqueueService.GetUserPositionAsync(id, userId);
 
                 return Ok(new { status = "waiting", position });
             }
@@ -87,12 +90,12 @@ namespace FinalLab1.Controllers
                 return BadRequest("Invalid or missing user ID.");
 
             // Kiểm tra user có đang active không
-            bool isActive = await _queueService.IsUserActiveAsync(id, userId);
+            bool isActive = await _activequeueService.IsUserActiveAsync(id, userId);
             if (!isActive)
                 return BadRequest("User is not currently active in this event.");
 
             // Remove khỏi danh sách active
-            await _queueService.RemoveActiveUserAsync(id, userId);
+            await _activequeueService.RemoveActiveUserAsync(id, userId);
 
             // Gửi message để kích hoạt xử lý người tiếp theo
             var message = JsonConvert.SerializeObject(new QueueMessage
@@ -108,8 +111,8 @@ namespace FinalLab1.Controllers
         [HttpGet("event/{id}/active-users")]
         public async Task<IActionResult> GetActiveUsers([FromRoute] int id)
         {
-            var activeUsers = await _queueService.GetActiveUsersAsync(id);
-            var waitingUsers = await _queueService.GetWaitingUsersAsync(id);
+            var activeUsers = await _activequeueService.GetActiveUsersAsync(id);
+            var waitingUsers = await _eventqueueService.GetWaitingUsersAsync(id);
 
             return Ok(new
             {

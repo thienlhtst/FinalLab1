@@ -16,28 +16,32 @@ namespace FinalLab1.Services.Redis
 
         public async Task<long> GetSoldCountAsync(int seatId)
         {
-            return await GetQueueLengthAsync(seatId.ToString()); // Lấy số lượng vé đã bán
+            return await _db.ListLengthAsync(_prefix + seatId);
         }
 
         public async Task<bool> AddTicketToQueueAsync(int seatId, int userId)
         {
             var ticketCount = await GetSoldCountAsync(seatId);
 
-            // Kiểm tra số ghế còn lại
             var seat = await _genericService.GetByIdAsync(seatId);
+            if (seat == null || string.IsNullOrEmpty(seat.CountSeat))
+                return false;
+
             var maxSeat = int.Parse(seat.CountSeat);
 
             if (ticketCount >= maxSeat)
             {
-                return false; // Vé đã hết
+                return false; // Hết vé
             }
 
-            return await AddToQueueAsync(seatId.ToString(), userId); // Thêm vào queue Redis
+            await _db.ListRightPushAsync(_prefix + seatId, userId);
+            return true;
         }
 
         public async Task<bool> RemoveUserFromQueueAsync(int seatId, int userId)
         {
-            return await RemoveFromQueueAsync(seatId.ToString(), userId); // Gỡ người dùng khỏi queue Redis
+            var removedCount = await _db.ListRemoveAsync(_prefix + seatId, userId);
+            return removedCount > 0;
         }
     }
 }

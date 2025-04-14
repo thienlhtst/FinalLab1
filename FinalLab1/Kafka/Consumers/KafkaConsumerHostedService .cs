@@ -9,19 +9,21 @@ namespace FinalLab1.Kafka.Consumers
 {
     public class KafkaConsumerHostedService : BackgroundService
     {
-        private readonly RedisQueueService _queueService;
+        private readonly EventQueueRedisService _queueService;
+        private readonly ActiveEventRedisService _activequeueService;
         private readonly IHubContext<QueueHub> _hubContext;
         private readonly IConsumer<Null, string> _consumer;
         private readonly ILogger<KafkaConsumerHostedService> _logger;
         private const int MAX_ACTIVE_USERS = 2;
 
         public KafkaConsumerHostedService(
-            RedisQueueService queueService,
+            EventQueueRedisService eventQueueRedisService, ActiveEventRedisService activequeueService,
             IConfiguration config,
             IHubContext<QueueHub> hubContext,
             ILogger<KafkaConsumerHostedService> logger)
         {
-            _queueService = queueService;
+            _queueService = eventQueueRedisService;
+            _activequeueService = activequeueService;
             _hubContext = hubContext;
             _logger = logger;
 
@@ -55,7 +57,7 @@ namespace FinalLab1.Kafka.Consumers
                                 continue;
 
                             // Kiểm tra số lượng người đang truy cập
-                            var activeCount = await _queueService.GetActiveUserCountAsync(data.EventId);
+                            var activeCount = await _activequeueService.GetActiveUserCountAsync(data.EventId);
 
                             if (activeCount < MAX_ACTIVE_USERS)
                             {
@@ -64,7 +66,7 @@ namespace FinalLab1.Kafka.Consumers
 
                                 if (nextUserId.HasValue)
                                 {
-                                    await _queueService.AddActiveUserAsync(data.EventId, nextUserId.Value);
+                                    await _activequeueService.AddActiveUserAsync(data.EventId, nextUserId.Value);
 
                                     await _hubContext.Clients.User(nextUserId.Value.ToString())
                                         .SendAsync("AccessGranted", data.EventId);

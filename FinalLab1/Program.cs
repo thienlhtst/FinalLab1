@@ -86,7 +86,6 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Conn
 builder.Services.AddScoped<TicketQueueService>();
 
 // ✅ Constructor đã sửa public, và không cần truyền prefix
-builder.Services.AddSingleton<RedisQueueService>();
 builder.Services.AddSingleton<ActiveEventRedisService>();
 builder.Services.AddSingleton<EventQueueRedisService>();
 

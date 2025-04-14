@@ -5,42 +5,41 @@ namespace FinalLab1.Services.Redis
     public class EventQueueRedisService : BaseRedisService
     {
         public EventQueueRedisService(IConnectionMultiplexer redis)
-            : base(redis, "event_queue_") // Prefix được truyền vào lớp cơ sở
+            : base(redis, "event_queue_")
         {
         }
 
         public async Task<long> EnqueueAsync(int eventId, int userId)
         {
-            return await AddToQueueAsync(eventId.ToString(), userId) ? 1 : 0;
+            return await _db.ListRightPushAsync(_prefix + eventId, userId);
         }
 
-        public async Task<long> GetQueueLengthAsync(int eventId)
+        public async Task<long?> GetUserPositionAsync(int eventId, int userId)
         {
-            return await base.GetQueueLengthAsync(eventId.ToString());
+            var queue = await _db.ListRangeAsync(_prefix + eventId);
+            for (int i = 0; i < queue.Length; i++)
+            {
+                if (queue[i].ToString() == userId.ToString())
+                    return i + 1;
+            }
+            return null;
         }
 
         public async Task<int?> DequeueAsync(int eventId)
         {
-            try
-            {
-                var userId = await _db.ListLeftPopAsync(_prefix + eventId);
-                return userId.IsNullOrEmpty ? null : (int?)int.Parse(userId!);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error dequeuing user: {ex.Message}");
-                return null;
-            }
+            var userId = await _db.ListLeftPopAsync(_prefix + eventId);
+            return userId.IsNullOrEmpty ? null : (int?)int.Parse(userId!);
         }
 
         public async Task RemoveFromQueueAsync(int eventId, int userId)
         {
-            await RemoveFromQueueAsync(eventId.ToString(), userId);
+            await _db.ListRemoveAsync(_prefix + eventId, userId, 0);
         }
 
         public async Task<List<int>> GetWaitingUsersAsync(int eventId)
         {
-            return await GetQueueAsync(eventId.ToString());
+            var list = await _db.ListRangeAsync(_prefix + eventId);
+            return list.Select(item => int.Parse(item.ToString())).ToList();
         }
     }
 }
